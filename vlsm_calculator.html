@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>VLSM Calculator</title>
+  </head>
+  <body>
+    <h1>VLSM Calculator</h1>
+    <p>Please enter the IP address and subnet mask for the main network:</p>
+    <form>
+      <label for="ip-address">IP Address:</label>
+      <input type="text" id="ip-address" name="ip-address"><br><br>
+      <label for="subnet-mask">Subnet Mask:</label>
+      <input type="text" id="subnet-mask" name="subnet-mask"><br><br>
+      <p>Please enter the requirements for each subnet:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Subnet Name</th>
+            <th>Required Hosts</th>
+          </tr>
+        </thead>
+        <tbody id="requirements">
+          <tr>
+            <td><input type="text" name="subnet-name-1"></td>
+            <td><input type="text" name="subnet-requirements-1"></td>
+          </tr>
+        </tbody>
+      </table>
+      <button type="button" id="add-subnet-button">Add Subnet</button><br><br>
+      <input type="submit" value="Calculate">
+    </form>
+    <p>The subnet details are:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Subnet Name</th>
+          <th>Subnet Address</th>
+          <th>Subnet Mask</th>
+          <th>Usable IP Range</th>
+        </tr>
+      </thead>
+      <tbody id="subnets"></tbody>
+    </table>
+    <script>
+      // Get the form elements and attach event listeners
+      const form = document.querySelector("form");
+      const addSubnetButton = document.querySelector("#add-subnet-button");
+      form.addEventListener("submit", calculate);
+      addSubnetButton.addEventListener("click", addSubnet);
+
+      function calculate(event) {
+        // Prevent the form from submitting and reloading the page
+        event.preventDefault();
+
+        // Get the values of the IP address and subnet mask inputs
+        const ipAddress = document.querySelector("#ip-address").value;
+        const subnetMask = document.querySelector("#subnet-mask").value;
+
+        // Split the IP address and subnet mask into their octets
+        const ipAddressOctets = ipAddress.split(".");
+        const subnetMaskOctets = subnetMask.split(".");
+
+        // Convert the octets from strings to numbers
+        const ipAddressOctetsAsNumbers = ipAddressOctets.map(octet => parseInt(octet));
+        const subnetMaskOctetsAsNumbers = subnetMaskOctets.map(octet => parseInt(octet));
+
+        // Calculate the network address and number of hosts in the main network
+        const networkAddressOctets = ipAddressOctetsAsNumbers.map((octet, index) => {
+          return octet & subnetMaskOctetsAsNumbers[index];
+        });
+        const networkAddress = networkAddressOctets.join(".");
+        const numberOfHosts = calculateNumberOfHosts(subnetMaskOctetsAsNumbers);
+
+        // Calculate the requirements for each subnet
+        const subnetRequirements = [];
+        const subnetNameInputs = document.querySelectorAll("input[name^='subnet-name-']");
+        const subnetRequirementsInputs = document.querySelectorAll("input[name^='subnet-requirements-']");
+        for (let i = 0; i < subnetNameInputs.length; i++) {
+          const name = subnetName
+          Inputs[i].value;
+          const requirements = parseInt(subnetRequirementsInputs[i].value);
+          subnetRequirements.push({ name, requirements });
+        }
+
+        // Calculate the subnet mask and number of hosts for each subnet
+        const subnets = [];
+        let remainingHosts = numberOfHosts;
+        for (let i = 0; i < subnetRequirements.length; i++) {
+          const subnetRequirement = subnetRequirements[i];
+
+          // Calculate the subnet mask for the subnet
+          const subnetMaskInverted = subnetMaskOctetsAsNumbers.map(octet => 255 - octet);
+          const subnetMaskRequiredBits = Math.ceil(Math.log2(subnetRequirement.requirements + 2));
+          const subnetMaskRequiredOctets = Math.floor(subnetMaskRequiredBits / 8);
+          const subnetMaskRemainingBits = subnetMaskRequiredBits % 8;
+          const subnetMask = subnetMaskInverted.map((octet, index) => {
+            if (index < subnetMaskRequiredOctets) {
+              return 255;
+            } else if (index === subnetMaskRequiredOctets) {
+              return 256 - Math.pow(2, 8 - subnetMaskRemainingBits);
+            } else {
+              return 0;
+            }
+          });
+          const subnetMaskAsDecimal = subnetMask.join(".");
+          const subnetMaskAsBinary = subnetMask.map(octet => octet.toString(2).padStart(8, "0")).join("");
+
+          // Calculate the number of hosts for the subnet
+          const numberOfHostsForSubnet = Math.pow(2, 32 - subnetMaskRequiredBits) - 2;
+          remainingHosts -= numberOfHostsForSubnet;
+
+          // Calculate the subnet address for the subnet
+          const subnetAddressOctets = networkAddressOctets.map((octet, index) => {
+            if (index < subnetMaskRequiredOctets) {
+              return octet;
+            } else if (index === subnetMaskRequiredOctets) {
+              return octet + Math.pow(2, 8 - subnetMaskRemainingBits) * Math.floor(Math.random() * (256 / Math.pow(2, 8 - subnetMaskRemainingBits)));
+            } else {
+              return 0;
+            }
+          });
+          const subnetAddress = subnetAddressOctets.join(".");
+
+          // Calculate the usable IP range for the subnet
+          const firstUsableIpAddress = subnetAddressOctets.slice();
+          firstUsableIpAddress[3]++;
+          const lastUsableIpAddress = subnetAddressOctets.slice();
+          lastUsableIpAddress[3] += numberOfHostsForSubnet;
+          lastUsableIpAddress[3]--;
+          const usableIpRange = `${firstUsableIpAddress.join(".")} - ${lastUsableIpAddress.join(".")}`;
+
+          // Add the subnet details to the table
+          const subnetsTableBody = document.querySelector("#subnets");
+          const row = subnetsTableBody.insertRow(-1);
+          const nameCell = row.insertCell(0);
+          const addressCell = row.insertCell(1);
+          const maskCell = row.insertCell(2);
+          const rangeCell = row.insertCell(3);
+          nameCell.innerText = subnetRequirement.name;
+          addressCell.innerText = subnetAddress;
+          maskCell.innerText = subnetMaskAsDecimal;
+          rangeCell.innerText = usableIpRange;
+
+          subnets.push({
+            name: subnetRequirement.name,
+            address: subnetAddress,
+            mask: subnetMaskAsDecimal,
+            range: usableIpRange,
+            hosts: numberOfHostsForSubnet,
+            maskBinary: subnetMaskAsBinary,
+          });
+        }
+
+        // Add the details of the main network to the table
+        const subnetsTableBody = document.querySelector("#subnets");
+        const
+        mainNetworkRow = subnetsTableBody.insertRow(0);
+          const mainNetworkNameCell = mainNetworkRow.insertCell(0);
+          const mainNetworkAddressCell = mainNetworkRow.insertCell(1);
+          const mainNetworkMaskCell = mainNetworkRow.insertCell(2);
+          const mainNetworkRangeCell = mainNetworkRow.insertCell(3);
+          mainNetworkNameCell.innerText = "Main Network";
+          mainNetworkAddressCell.innerText = networkAddressAsDecimal;
+          mainNetworkMaskCell.innerText = subnetMaskAsDecimal;
+          mainNetworkRangeCell.innerText = `${networkAddressAsDecimal} - ${broadcastAddressAsDecimal}`;
+
+          // Display the remaining number of hosts
+          const remainingHostsElement = document.querySelector("#remaining-hosts");
+          remainingHostsElement.innerText = remainingHosts;
+
+          // Display the subnet details in the summary section
+          const subnetsSummaryElement = document.querySelector("#subnets-summary");
+          subnetsSummaryElement.innerHTML = "";
+          for (let i = 0; i < subnets.length; i++) {
+            const subnet = subnets[i];
+            const subnetDetails = `
+              <div class="subnet">
+                <h4>${subnet.name}</h4>
+                <div>Address: ${subnet.address}</div>
+                <div>Mask: ${subnet.mask}</div>
+                <div>Usable IP Range: ${subnet.range}</div>
+                <div>Number of Hosts: ${subnet.hosts}</div>
+                <div>Mask (Binary): ${subnet.maskBinary}</div>
+              </div>
+            `;
+            subnetsSummaryElement.innerHTML += subnetDetails;
+          }
+
+          // Display the main network details in the summary section
+          const mainNetworkDetails = `
+            <div class="subnet">
+              <h4>Main Network</h4>
+              <div>Address: ${networkAddressAsDecimal}</div>
+              <div>Mask: ${subnetMaskAsDecimal}</div>
+              <div>Usable IP Range: ${networkAddressAsDecimal} - ${broadcastAddressAsDecimal}</div>
+              <div>Number of Hosts: ${numberOfHosts}</div>
+              <div>Mask (Binary): ${subnetMaskAsBinary}</div>
+            </div>
+          `;
+          subnetsSummaryElement.innerHTML += mainNetworkDetails;
+        }

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supernetting Calculator</title>
+</head>
+
+<body>
+  <h1>Supernetting Calculator</h1>
+  <p>Enter the details of the subnets you want to combine:</p>
+  <div id="subnet-inputs">
+    <div class="subnet-input-container">
+      <label for="subnet-1-input">Subnet 1:</label>
+      <input type="text" id="subnet-1-input" class="subnet-input" placeholder="192.168.0.0/24">
+    </div>
+    <div class="subnet-input-container">
+      <label for="subnet-2-input">Subnet 2:</label>
+      <input type="text" id="subnet-2-input" class="subnet-input" placeholder="192.168.1.0/24">
+    </div>
+  </div>
+  <button id="add-subnet-button">Add another subnet</button>
+  <button id="calculate-button">Calculate</button>
+  <div id="result-container"></div>
+
+  <script>
+    (function () {
+      const calculateButton = document.querySelector("#calculate-button");
+      if (calculateButton) {
+        calculateButton.addEventListener("click", () => {
+          // Get the subnet inputs
+          const subnetInputs = document.querySelectorAll(".subnet-input");
+          const subnets = [];
+          let totalHosts = 0;
+
+          // Validate and process the subnet inputs
+          subnetInputs.forEach((input) => {
+            const subnetDetails = input.value.split("/");
+            const subnetAddress = subnetDetails[0];
+            const subnetPrefixLength = parseInt(subnetDetails[1]);
+
+            // Validate the subnet prefix length
+            if (isNaN(subnetPrefixLength) || subnetPrefixLength < 0 || subnetPrefixLength > 32) {
+              alert("Invalid subnet prefix length. Please enter a number between 0 and 32.");
+              return;
+            }
+
+            // Calculate the subnet mask
+            const subnetMaskAsBinary = "1".repeat(subnetPrefixLength) + "0".repeat(32 - subnetPrefixLength);
+            const subnetMaskAsDecimal = `${parseInt(subnetMaskAsBinary.substr(0, 8), 2)}.${parseInt(
+              subnetMaskAsBinary.substr(8, 8),
+              2
+            )}.${parseInt(subnetMaskAsBinary.substr(16, 8), 2)}.${parseInt(subnetMaskAsBinary.substr(24, 8), 2)}`;
+
+            // Calculate the network address and broadcast address
+            const subnetAddressAsBinary = subnetAddress
+              .split(".")
+              .map((octet) => {
+                return ("00000000" + parseInt(octet, 10).toString(2)).slice(-8);
+              })
+              .join("");
+            const networkAddressAsBinary = subnetAddressAsBinary.substr(0, subnetPrefixLength) + "0".repeat(32 - subnetPrefixLength);
+            const networkAddressAsDecimal = `${parseInt(networkAddressAsBinary.substr(0, 8), 2)}.${parseInt(
+              networkAddressAsBinary.substr(8, 8),
+              2
+            )}.${parseInt(networkAddressAsBinary.substr(16, 8), 2)}.${parseInt(networkAddressAsBinary.substr(24, 8), 2)}`;
+            const broadcastAddressAsBinary = subnetAddressAsBinary.substr(0, subnetPrefixLength) + "1".repeat(32 -
+            subnetPrefixLength);
+            const broadcastAddressAsDecimal = `${parseInt(broadcastAddressAsBinary.substr(0, 8), 2)}.${parseInt(
+              broadcastAddressAsBinary.substr(8, 8),
+              2
+            )}.${parseInt(broadcastAddressAsBinary.substr(16, 8), 2)}.${parseInt(broadcastAddressAsBinary.substr(24, 8), 2)}`;
+
+            // Calculate the number of hosts in the subnet
+            const numberOfHosts = Math.pow(2, 32 - subnetPrefixLength) - 2;
+            totalHosts += numberOfHosts;
+
+            // Add the subnet to the list of subnets
+            subnets.push({
+              address: subnetAddress,
+              prefixLength: subnetPrefixLength,
+              mask: subnetMaskAsDecimal,
+              network: networkAddressAsDecimal,
+              broadcast: broadcastAddressAsDecimal,
+              numberOfHosts: numberOfHosts,
+            });
+          });
+
+          // Validate the number of subnets
+          if (subnets.length < 2) {
+            alert("Please enter at least two subnets to combine.");
+            return;
+          }
+
+          // Validate that the subnets are contiguous
+          subnets.sort((a, b) => {
+            return a.address.localeCompare(b.address);
+          });
+          for (let i = 1; i < subnets.length; i++) {
+            const previousSubnet = subnets[i - 1];
+            const currentSubnet = subnets[i];
+            const previousSubnetAddress = previousSubnet.address.split(".");
+            const currentSubnetAddress = currentSubnet.address.split(".");
+            const previousSubnetPrefixLength = previousSubnet.prefixLength;
+            const currentSubnetPrefixLength = currentSubnet.prefixLength;
+
+            // Validate the subnet prefix lengths
+            if (previousSubnetPrefixLength !== currentSubnetPrefixLength) {
+              alert("The subnets you entered do not have the same prefix length.");
+              return;
+            }
+
+            // Validate that the subnets are contiguous
+            for (let j = 0; j < 4; j++) {
+              if (
+                parseInt(currentSubnetAddress[j], 10) !== parseInt(previousSubnetAddress[j], 10) ||
+                (j === 3 && parseInt(currentSubnetAddress[j], 10) - parseInt(previousSubnetAddress[j], 10) !== 1)
+              ) {
+                alert("The subnets you entered are not contiguous.");
+                return;
+              }
+            }
+          }
+
+          // Calculate the supernet prefix length and mask
+          let supernetPrefixLength = subnets[0].prefixLength;
+          let supernetMaskAsBinary = "1".repeat(supernetPrefixLength) + "0".repeat(32 - supernetPrefixLength);
+          subnets.forEach((subnet) => {
+            while (supernetPrefixLength < subnet.prefixLength) {
+              supernetPrefixLength++;
+              supernetMaskAsBinary = "1".repeat(supernetPrefixLength) + "0".repeat(32 - supernetPrefixLength);
+            }
+          });
+          const supernetMaskAsDecimal = `${parseInt(supernetMaskAsBinary.substr(0, 8), 2)}.${parseInt(
+            supernetMaskAsBinary.substr(8, 8),
+            2
+          )}.${parseInt(supernetMaskAsBinary.substr(16, 8), 2)}.${parseInt(supernetMaskAsBinary.substr(24, 8), 2)}`;
+
+          // Calculate the supernet address and broadcast address
+          const supernetAddressAsBinary = subnets[0].address
+            .split(".")
+            .map((octet, index) => {
+              return parseInt(octet, 10) & parseInt(supernetMaskAsBinary.split(".")[index], 2);
+        })
+        .join(".");
+      const supernetAddressAsDecimal = `${parseInt(supernetAddressAsBinary.substr(0, 8), 2)}.${parseInt(
+        supernetAddressAsBinary.substr(8, 8),
+        2
+      )}.${parseInt(supernetAddressAsBinary.substr(16, 8), 2)}.${parseInt(
+        supernetAddressAsBinary.substr(24, 8),
+        2
+      )}`;
+      const supernetBroadcastAsBinary = subnets[subnets.length - 1].broadcast
+        .split(".")
+        .map((octet, index) => {
+          return parseInt(octet, 10) | ~parseInt(supernetMaskAsBinary.split(".")[index], 2) & 0xff;
+        })
+        .join(".");
+      const supernetBroadcastAsDecimal = `${parseInt(supernetBroadcastAsBinary.substr(0, 8), 2)}.${parseInt(
+        supernetBroadcastAsBinary.substr(8, 8),
+        2
+      )}.${parseInt(supernetBroadcastAsBinary.substr(16, 8), 2)}.${parseInt(
+        supernetBroadcastAsBinary.substr(24, 8),
+        2
+      )}`;
+
+      // Calculate the number of hosts in the supernet
+      const numberOfSupernetHosts = totalHosts + 2 * (subnets.length - 1);
+
+      // Display the results
+      document.getElementById("supernet-address").innerHTML = supernetAddressAsDecimal;
+      document.getElementById("supernet-prefix-length").innerHTML = supernetPrefixLength;
+      document.getElementById("supernet-mask").innerHTML = supernetMaskAsDecimal;
+      document.getElementById("supernet-network").innerHTML = supernetAddressAsDecimal;
+      document.getElementById("supernet-broadcast").innerHTML = supernetBroadcastAsDecimal;
+      document.getElementById("supernet-number-of-hosts").innerHTML = numberOfSupernetHosts;
+    }
+  </script>
+</body>
+</html>
